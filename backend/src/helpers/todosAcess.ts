@@ -95,3 +95,25 @@ export class TodosAccess {
   
     return new XAWS.DynamoDB.DocumentClient()
   }
+
+
+  export const generateUploadUrl = async(userId: string, todoId: string, attachmentUrl: string): Promise<void> => {
+    const DatabaseSet = await new XAWS.DynamoDB.DocumentClient().update({
+      TableName: process.env.TODOS_TABLE,
+      Key: {
+        userId,
+        todoId
+      },
+      UpdateExpression: 'set attachmentUrl = :attachmentUrl',
+      ExpressionAttributeValues: {
+        ':attachmentUrl': attachmentUrl
+      }
+    }).promise()
+    logger.info('generateUploadUrl -> ', {
+      userId,
+      todoId,
+      attachmentUrl,
+      DatabaseSet
+    })
+    
+  }
