@@ -15,9 +15,9 @@ export const handler = middy(
   async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
     // Write your code here
     logger.info("Getting todos");
-    const userId = getUserId(event);
+    const userId: string = await getUserId(event);
     const todos = await getTodosForUser(userId);
-
+    if(todos)
     return {
       statusCode: 200,
       headers: {
@@ -25,7 +25,7 @@ export const handler = middy(
         'Access-Control-Allow-Credentials': true
       },
       body: JSON.stringify({
-        "items": todos
+        items: todos
       })
     }
   });

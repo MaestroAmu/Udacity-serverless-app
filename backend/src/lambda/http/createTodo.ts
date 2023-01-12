@@ -15,14 +15,18 @@ export const handler = middy(
     // TODO: Implement creating a new TODO item
     logger.info('Creating Todo');
 
-    const userId = getUserId(event);
+    const userId: string = await getUserId(event);
 
-    const newItem = await createTodo(newTodo, userId);
-
+    const newItem = await createTodo(userId, newTodo);
+    if(newItem)
     return {
-      statusCode: 201,
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Credentials': true
+      },
       body: JSON.stringify({
-        "item": newItem
+        item: newItem
       })
     }
   }
