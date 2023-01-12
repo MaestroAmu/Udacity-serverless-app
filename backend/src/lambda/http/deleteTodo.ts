@@ -16,12 +16,16 @@ export const handler = middy(
     // TODO: Remove a TODO item by id
     logger.info('Deleting a todo');
 
-    const userId = getUserId(event);
+    const userId: string = await getUserId(event);
 
-    await deleteTodo(todoId, userId);
-
+    const rmTodo = await deleteTodo(userId, todoId);
+    if(rmTodo)
     return {
       statusCode: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Credentials': true
+      },
       body: ""
     }
   }

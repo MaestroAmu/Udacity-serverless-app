@@ -10,110 +10,128 @@ const XAWS = AWSXRay.captureAWS(AWS)
 const logger = createLogger('TodosAccess')
 
 // TODO: Implement the dataLayer logic
-export class TodosAccess {
 
-    constructor(
-      private readonly docClient: DocumentClient = createDynamoDBClient(),
-      private readonly todosTable = process.env.TODOS_TABLE,
-      private readonly todosIndex = process.env.TODOS_CREATED_AT_INDEX,
-    ) {
-    }
+const docClient: DocumentClient =new XAWS.DynamoDB.DocumentClient()
+const todosTable = process.env.TODOS_TABLE
+const todosIndex = process.env.TODOS_CREATED_AT_INDEX
+
+export const ifExists = async(userId: string, todoId: string): Promise<unknown> => {
+	const todoItem = await docClient.get({
+		TableName: todosTable,
+		Key: {
+			userId,
+			todoId
+		}
+	}).promise()
+	if(todoItem)
+		logger.info(`${todoId} has been found`)
+	return !!todoItem.Item
+}
+
+
+export const generateUploadUrl = async(userId: string, todoId: string, attachmentUrl: string): Promise<void> => {
+	if(!ifExists(userId,todoId)){
+		logger.info(`Generate image URL -> Invalid todoId`, {
+			todoId,
+			userId,
+			attachmentUrl
+		})
+		throw new Error(`Invalid todo`)
+	}
+	const DatabaseSet = await docClient.update({
+		TableName: todosTable,
+		Key: {
+			userId,
+			todoId
+		},
+		UpdateExpression: 'set attachmentUrl = :attachmentUrl',
+		ExpressionAttributeValues: {
+			':attachmentUrl': attachmentUrl
+		}
+	}).promise()
+	logger.info('generateUploadUrl -> ', {
+		userId,
+		todoId,
+		attachmentUrl,
+		DatabaseSet
+	})
+	
+}
+
+export const createTodo = async(todoItem: TodoItem): Promise<TodoItem> => {	
+	await docClient.put({
+		TableName: todosTable,
+		Item: todoItem
+	}).promise()
+	logger.info('Create Todo-> ',{
+		todoItem
+	})
+	return todoItem
+}
   
-    async getTodosForUser(userId: string): Promise<TodoItem[]> {
-      logger.info('Getting all todos')
+export const getTodosForUser = async(userId: string): Promise<TodoItem[]> => {
+	const Query = await docClient.query({
+		TableName: todosTable,
+		IndexName: todosIndex,
+		KeyConditionExpression: 'userId = :userId',
+		ExpressionAttributeValues: {
+			':userId': userId
+		}
+	}).promise()
+	if(!Query) throw new Error(`Failed, try again!`)
+	const todosList = Query.Items
+	logger.info(`Get user todods ->`, {
+		todos: todosList as TodoItem[]
+	})
+	return todosList as TodoItem[]
+}
   
-      const result = await this.docClient.query({
-        TableName: this.todosTable,
-        IndexName: this.todosIndex,
-        ExpressionAttributeValues: {
-          ':userId': userId
-        },
-        KeyConditionExpression: 'userId = :userId',
-      }).promise()
-  
-      const items = result.Items
-      return items as TodoItem[]
-    }
-  
-    async createTodo(todoItem: TodoItem): Promise<TodoItem> {
-      logger.info('Creating a todo');
-      await this.docClient.put({
-        TableName: this.todosTable,
-        Item: todoItem
-      }).promise()
-  
-      return todoItem;
-    }
-  
-    async updateTodo(todoId: string, todo: TodoUpdate, userId: string): Promise<TodoUpdate> {
-      logger.info('Updating a todo');
-      const updated = await this.docClient.update({
-        TableName: this.todosTable,
-        Key: {
-          userId: userId,
-          todoId: todoId
-        },
-        ExpressionAttributeNames: {
-          '#todo_name': 'name',
-        },
-        ExpressionAttributeValues: {
-          ':name': todo.name,
-          ':dueDate': todo.dueDate,
-          ':done': todo.done,
-        },
-        UpdateExpression: 'SET #todo_name = :name, dueDate = :dueDate, done = :done',
-        ReturnValues: 'ALL_NEW',
-      }).promise()
-  
-      logger.info(updated.Attributes);
-      return todo;
-    }
-  
-  
-    async deleteTodo(todoItemId: string, userId: string): Promise<boolean> {
-      logger.info('Deleting a todo');
-      await this.docClient.delete({
-        TableName: this.todosTable,
-        Key: {
-          todoId: todoItemId,
-          userId: userId
-        },
-      }).promise()
-  
-      return true;
-    }
-  }
-  
-  function createDynamoDBClient() {
-    if (process.env.IS_OFFLINE) {
-      logger.info('Creating a local DynamoDB instance')
-      return new XAWS.DynamoDB.DocumentClient({
-        region: 'localhost',
-        endpoint: 'http://localhost:8000'
+export const updateTodo = async(userId: string, todoId: string, todosUpdate: TodoUpdate): Promise<void> => {
+    if(!ifExists(userId,todoId)){
+      logger.info(`Update todo -> Invalid todoId`, {
+        todoId
       })
+      throw new Error(`Invalid todo`)
     }
-  
-    return new XAWS.DynamoDB.DocumentClient()
-  }
-
-
-  export const generateUploadUrl = async(userId: string, todoId: string, attachmentUrl: string): Promise<void> => {
-    const DatabaseSet = await new XAWS.DynamoDB.DocumentClient().update({
-      TableName: process.env.TODOS_TABLE,
+    const updatedTodo = await docClient.update({
+      TableName: todosTable,
       Key: {
         userId,
         todoId
       },
-      UpdateExpression: 'set attachmentUrl = :attachmentUrl',
+      UpdateExpression: 'set #name = :name, dueDate = :dueDate, done = :done',
+      ExpressionAttributeNames: {
+        '#name': 'name'
+      },
       ExpressionAttributeValues: {
-        ':attachmentUrl': attachmentUrl
+        ':name': todosUpdate.name,
+        ':dueDate': todosUpdate.dueDate,
+        ':done': todosUpdate.done
       }
     }).promise()
-    logger.info('generateUploadUrl -> ', {
-      userId,
-      todoId,
-      attachmentUrl,
-      DatabaseSet
+    logger.info(`Update todo -> `, {
+      updatedTodo
     })
-    
+    return
   }
+  
+  
+export const deleteTodo = async(userId: string, todoId: string): Promise<void> =>{
+    if(!ifExists(userId,todoId)){
+      logger.info(`Delete todo -> Invalid todoId`, {
+        todoId
+      })
+      throw new Error(`Invalid todo`)
+    }
+    await docClient.delete({
+      TableName: todosTable,
+      Key: {
+        userId,
+        todoId
+      }
+    }).promise()
+    logger.info(`Delete todo -> `,{
+      todoId
+    })
+  }
+  
